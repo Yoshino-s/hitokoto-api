@@ -9,7 +9,7 @@ services:
       NODE_ENV: production
     ports:
       - 8082:8000
-    links: 
+    depends_on: 
       - redis
     restart: unless-stopped
     volumes: 
@@ -18,7 +18,7 @@ services:
   redis:
     image: redis
     restart: unless-stopped
-    container_name: redis
+    container_name: hitokoto_redis
     hostname: redis
     ports: 
       - 6380:6379
