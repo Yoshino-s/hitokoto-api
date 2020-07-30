@@ -1,8 +1,8 @@
 FROM node:lts-alpine
-ENV NODE_ENV production
+ENV NODE_ENV development
 WORKDIR /usr/src/app
 COPY ["package.json", "yarn.lock", "./"]
-RUN yarn --prod && mv node_modules ../
+RUN yarn && mv node_modules ../
 COPY . .
 VOLUME [ "./data" ]
 EXPOSE 8000

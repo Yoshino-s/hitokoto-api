@@ -6,7 +6,7 @@ services:
     hostname: hitokoto_api
     build: .
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
     ports:
       - 8082:8000
     depends_on: 
@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
     volumes: 
       - ./web/data:/usr/src/app/data
-    
+    command: node core -D 
   redis:
     image: redis
     restart: unless-stopped
