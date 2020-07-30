@@ -1,16 +1,20 @@
 /* eslint-disable node/no-deprecated-api */
-// const path = require('path')
-const url = require('url')
+const path = require('path')
+const fs = require('fs')
 
 const winston = require('winston')
-const axios = require('axios')
 const colors = require('colors')
-const nconf = require('nconf')
 const semver = require('semver')
 const _ = require('lodash')
 
 const cache = require('../cache')
 const AB = require('../extensions/sentencesABSwitcher')
+
+function load (p) {
+  return {
+    data: JSON.parse(fs.readFileSync(p))
+  }
+}
 
 async function Task () {
   // TODO: 按需同步流程中移除失效句子（在包中移除的句子）
@@ -24,21 +28,21 @@ async function Task () {
   const localBundleUpdatedAt = await AB.get('hitokoto:bundle:updated_at') || 0
   const localBundleVersionData = await AB.get('hitokoto:bundle:version:record') || {}
   // 获取远程数据的版控文件
-  const remoteUrl = nconf.get('remote_sentences_url') || 'https://cdn.jsdelivr.net/gh/hitokoto-osc/sentences-bundle@latest/'
-  const remoteVersionUrl = url.resolve(remoteUrl, './version.json')
-  winston.verbose('[sentencesUpdateTask] fetching version data from: ' + remoteVersionUrl)
-  let response = await axios.get(remoteVersionUrl)
-  const remoteVersionData = response.data
+  const sentencePath = path.join(__dirname, '../../sentences/')
+  const sentenceVersion = path.resolve(sentencePath, './version.json')
+  winston.verbose('[sentencesUpdateTask] fetching version data from: ' + sentenceVersion)
+  let response = load(sentenceVersion)
+  const versionData = response.data
 
-  winston.verbose('[sentencesUpdateTask] remote bundle protocal version: ' + colors.green('v' + remoteVersionData.protocol_version))
-  if (!semver.satisfies(remoteVersionData.protocol_version, '>=1.0 <1.1')) {
-    winston.error('[sentencesUpdateTask] This program version is NOT support the protocol version: ' + remoteVersionData.protocol_version + ', please update your program.')
+  winston.verbose('[sentencesUpdateTask] bundle protocal version: ' + colors.green('v' + versionData.protocol_version))
+  if (!semver.satisfies(versionData.protocol_version, '>=1.0 <1.1')) {
+    winston.error('[sentencesUpdateTask] This program version is NOT support the protocol version: ' + versionData.protocol_version + ', please update your program.')
     return
   }
-  winston.verbose('[sentencesUpdateTask] remote bundle version: ' + colors.yellow('v' + remoteVersionData.bundle_version))
+  winston.verbose('[sentencesUpdateTask] bundle version: ' + colors.yellow('v' + versionData.bundle_version))
   winston.verbose('[sentencesUpdateTask] local bundle version: ' + colors.yellow('v' + localBundleVersion))
-  if (semver.eq(remoteVersionData.bundle_version, localBundleVersion) && localBundleUpdatedAt === remoteVersionData.updated_at) {
-    winston.verbose('[sentencesUpdateTask] The local records are same with the remote one, update ended.')
+  if (semver.eq(versionData.bundle_version, localBundleVersion) && localBundleUpdatedAt === versionData.updated_at) {
+    winston.verbose('[sentencesUpdateTask] The local records are same with the one, update ended.')
     return // 版本相同且生成时间戳相同、无需更新
   }
   // 需要更新，首先确认本地版本
@@ -47,18 +51,18 @@ async function Task () {
   let sentenceTotal = 0
   if (localBundleVersion === '0.0.0') { // 初次启动、全量同步数据
     // 获取分类数据
-    const remoteCategoriesUrl = url.resolve(remoteUrl, remoteVersionData.categories.path)
-    winston.verbose('[sentencesUpdateTask] fetching categroies data from: ' + colors.green(remoteCategoriesUrl))
-    response = await axios.get(remoteCategoriesUrl)
-    const remoteCategoriesData = response.data
-    await SideAB.set('hitokoto:bundle:categories', remoteCategoriesData)
+    const categoriesPath = path.resolve(sentencePath, versionData.categories.path)
+    winston.verbose('[sentencesUpdateTask] fetching categroies data from: ' + colors.green(categoriesPath))
+    response = load(categoriesPath)
+    const categoriesData = response.data
+    await SideAB.set('hitokoto:bundle:categories', categoriesData)
 
     const rClient = SideAB.getClient()
-    for (const category of remoteCategoriesData) {
+    for (const category of categoriesData) {
       // 读取分类的数据
-      const remoteSentenceUrl = url.resolve(remoteUrl, category.path)
-      winston.verbose('[sentencesUpdateTask] fetching sentences data from: ' + colors.green(remoteSentenceUrl))
-      response = await axios.get(remoteSentenceUrl)
+      const categoryPath = path.resolve(sentencePath, category.path)
+      winston.verbose('[sentencesUpdateTask] fetching sentences data from: ' + colors.green(categoryPath))
+      response = load(categoryPath)
       const categorySentences = response.data
       let minLength
       let maxLength
@@ -94,15 +98,15 @@ async function Task () {
       return
     }
     const rClient = SideAB.getClient()
-    if (!remoteVersionData.categories.timestamp !== localBundleVersionData.categories.timestamp) {
+    if (!versionData.categories.timestamp !== localBundleVersionData.categories.timestamp) {
       // 读取远端分类信息
-      const remoteCategoriesUrl = url.resolve(remoteUrl, remoteVersionData.categories.path)
-      winston.verbose('[sentencesUpdateTask] fetching categroies data from: ' + colors.green(remoteCategoriesUrl))
-      response = await axios.get(remoteCategoriesUrl)
-      const remoteCategoryData = response.data
+      const categoriesPath = path.resolve(sentencePath, versionData.categories.path)
+      winston.verbose('[sentencesUpdateTask] fetching categroies data from: ' + colors.green(categoriesPath))
+      response = load(categoriesPath)
+      const categoryData = response.data
 
       const categoriedNeededToAppend = []
-      for (const category of remoteCategoryData) {
+      for (const category of categoryData) {
         const c = _.find(localCategoriesData, { key: category.key })
         if (!c) {
           categoriedNeededToAppend.push(category)
@@ -110,9 +114,9 @@ async function Task () {
       }
       for (const category of categoriedNeededToAppend) {
         // 读取分类的数据
-        const remoteSentenceUrl = url.resolve(remoteUrl, category.path)
-        winston.verbose('[sentencesUpdateTask] fetching sentences data from: ' + colors.green(remoteSentenceUrl))
-        response = await axios.get(remoteSentenceUrl)
+        const sentencesPath = path.resolve(sentencePath, category.path)
+        winston.verbose('[sentencesUpdateTask] fetching sentences data from: ' + colors.green(sentencesPath))
+        response = load(sentencesPath)
         const categorySentences = response.data
         let minLength
         let maxLength
@@ -138,20 +142,20 @@ async function Task () {
         await SideAB.set(`hitokoto:bundle:category:${category.key}:max`, maxLength)
         await SideAB.set(`hitokoto:bundle:category:${category.key}:min`, minLength)
       }
-      await SideAB.set('hitokoto:bundle:categories', remoteCategoryData)
+      await SideAB.set('hitokoto:bundle:categories', categoryData)
     }
 
     // 然后比对句子信息
     for (const categoryVersion of localBundleVersionData.sentences) {
-      const remoteVersion = _.find(remoteVersionData, { key: categoryVersion.key })
-      if (!remoteVersion) {
+      const version = _.find(versionData, { key: categoryVersion.key })
+      if (!version) {
         // 多半是此分类被删除
         continue
       }
-      if (remoteVersion.timestamp !== categoryVersion.timestamp) { // 需要更新
-        const remoteSentencesUrl = url.resolve(remoteUrl, categoryVersion.path)
-        winston.verbose('[sentencesUpdateTask] fetching remote sentences data from: ' + colors.green(remoteSentencesUrl))
-        response = await axios.get(remoteSentencesUrl)
+      if (version.timestamp !== categoryVersion.timestamp) { // 需要更新
+        const sentencesPath = path.resolve(sentencePath, categoryVersion.path)
+        winston.verbose('[sentencesUpdateTask] fetching sentences data from: ' + colors.green(sentencesPath))
+        response = load(sentencesPath)
         const categorySentences = response.data
         const queue = (await cache.getClient()).multi()
         queue.del('hitokoto:bundle:category:' + categoryVersion.key)
@@ -190,9 +194,9 @@ async function Task () {
 
   // 更新版本记录
   await Promise.all([
-    SideAB.set('hitokoto:bundle:version', remoteVersionData.bundle_version),
-    SideAB.set('hitokoto:bundle:updated_at', remoteVersionData.updated_at),
-    SideAB.set('hitokoto:bundle:version:record', remoteVersionData),
+    SideAB.set('hitokoto:bundle:version', versionData.bundle_version),
+    SideAB.set('hitokoto:bundle:updated_at', versionData.updated_at),
+    SideAB.set('hitokoto:bundle:version:record', versionData),
     SideAB.set('hitokoto:bundle:sentences:total', sentenceTotal)
   ])
   // 切换数据库

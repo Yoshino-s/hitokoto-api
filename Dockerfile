@@ -5,5 +5,6 @@ COPY ["package.json", "yarn.lock", "./"]
 RUN yarn && mv node_modules ../
 COPY . .
 VOLUME [ "./data" ]
+VOLUME [ "./sentences" ]
 EXPOSE 8000
 CMD yarn start

@@ -1,0 +1,3 @@
+[submodule "sentences"]
+	path = sentences
+	url = https://github.com/Yoshino-s/sentences-bundle.git

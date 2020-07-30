@@ -13,7 +13,8 @@ services:
       - redis
     restart: unless-stopped
     volumes: 
-      - ./web/data:/usr/src/app/data
+      - ./data:/usr/src/app/data
+      - ./sentences-bundle:/usr/src/app/sentences
     command: node core -D 
   redis:
     image: redis
